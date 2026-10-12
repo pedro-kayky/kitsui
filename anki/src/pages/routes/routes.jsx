@@ -4,7 +4,7 @@ import Home from "../home/home";
 import Review from "../review/Review";
 import Progress from "../progress/Progress";
 import Decks from "../deck/decks";
-import Settings from "../Settings/Settings";
+import SignInPrompt from "../Settings/Settings";
 import NavBar from "../../assets/components/Navbar/NavBar";
 
 const AppRoutes = () => {
@@ -46,7 +46,7 @@ const AppRoutes = () => {
         {/* 2. Adiciona a rota de Settings aqui */}
         <Route 
           path="/settings" 
-          element={<Settings user={user} onLogin={handleLogin} onLogout={handleLogout} />} 
+          element={<SignInPrompt user={user} onLogin={handleLogin} onLogout={handleLogout} />} 
         />
       </Routes>
     </BrowserRouter>

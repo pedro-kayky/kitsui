@@ -5,6 +5,9 @@
   max-width: 800px;
   margin: 0 auto;
   padding: 20px;
+  background: #14141f; /* Adiciona o fundo escuro consistente para toda a secção */
+  min-height: 100vh;   /* Garante que ocupa a altura toda da tela se necessário */
+  color: #fff;         /* Garante que os textos fora dos cards também ficam brancos */
 }
 
 .review-setup-box, .review-results-box {

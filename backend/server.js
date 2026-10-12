@@ -21,11 +21,21 @@ if (!apiKey) {
 
 const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
 
-// Modelos do Gemini. Dá pra trocar pelo Render (Environment) sem mexer no código:
-//   GEMINI_MODEL           -> modelo principal
-//   GEMINI_FALLBACK_MODEL  -> modelo reserva, usado se o principal falhar
-const PRIMARY_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
-const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-2.5-flash';
+// Lista de modelos do Gemini, em ordem de prioridade. Se um falhar, o código
+// passa para o próximo até algum funcionar. Dá pra trocar a lista pelo Render
+// (Environment) sem mexer no código, separando os nomes por vírgula:
+//   GEMINI_MODELS=gemini-3.6-flash,gemini-3.8-flash,gemini-3.5-flash
+const DEFAULT_MODELS = [
+  'gemini-3.6-flash',
+  'gemini-3.8-flash',
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.1-flash-lite',
+];
+
+const MODELS = process.env.GEMINI_MODELS
+  ? process.env.GEMINI_MODELS.split(',').map((m) => m.trim()).filter(Boolean)
+  : DEFAULT_MODELS;
 
 // Inicializar o Supabase com as chaves do .env
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -102,12 +112,13 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // 503 = Google sobrecarregado, 429 = muitos pedidos em pouco tempo.
 const isTemporaryError = (err) => err?.status === 503 || err?.status === 429;
 
-// Tenta gerar o conteúdo com o modelo principal e, se ele não der conta,
-// passa para o modelo reserva. Cada modelo recebe até 3 tentativas
-// (esperando 1s, depois 2s entre elas).
-async function generateWithRetry(prompt, maxAttempts = 3) {
-  const models = [...new Set([PRIMARY_MODEL, FALLBACK_MODEL])];
+// Percorre a lista de modelos na ordem. Cada modelo recebe até 2 tentativas
+// (esperando 1s entre elas) se o erro for passageiro. Se continuar falhando,
+// ou se o modelo não existir mais (404), passa para o próximo da lista.
+async function generateWithRetry(prompt, maxAttempts = 2) {
+  const models = [...new Set(MODELS)];
   let lastError;
+  let temporaryError; // guarda o último erro passageiro (503/429), se houver
 
   for (const modelName of models) {
     const model = genAI.getGenerativeModel({
@@ -120,6 +131,7 @@ async function generateWithRetry(prompt, maxAttempts = 3) {
         return await model.generateContent(prompt);
       } catch (err) {
         lastError = err;
+        if (isTemporaryError(err)) temporaryError = err;
         console.warn(
           `Falha com ${modelName} (tentativa ${attempt}/${maxAttempts}): ${err.status || ''} ${err.message}`
         );
@@ -138,7 +150,9 @@ async function generateWithRetry(prompt, maxAttempts = 3) {
     }
   }
 
-  throw lastError;
+  // Se algum modelo falhou por sobrecarga, devolve esse erro (vira a mensagem amigável).
+  // Assim um 404 do modelo reserva não esconde o problema real.
+  throw temporaryError || lastError;
 }
 
 // ==========================================
@@ -256,7 +270,6 @@ Rules:
 app.listen(PORT, () => {
   console.log(`\n=================================`);
   console.log(`🚀 Backend running on port ${PORT}`);
-  console.log(`   Modelo principal: ${PRIMARY_MODEL}`);
-  console.log(`   Modelo reserva:   ${FALLBACK_MODEL}`);
+  console.log(`   Modelos (em ordem): ${MODELS.join(' -> ')}`);
   console.log(`=================================\n`);
 });

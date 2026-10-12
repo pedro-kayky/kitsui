@@ -433,19 +433,29 @@ export default function Decks() {
 
   if (!user) {
     return (
-      <div className="decks-page-container">
+      <div className="decks-page-container" style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '80vh',
+        width: '100%',
+        padding: '20px'
+      }}>
         <div style={{
           maxWidth: '420px',
-          margin: '60px auto',
-          padding: '30px',
+          width: '100%',
+          padding: '36px',
           textAlign: 'center',
-          backgroundColor: 'var(--card-bg, #ffffff)',
+          backgroundColor: '#ffffff',        
           borderRadius: '16px',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
-          border: '1px solid var(--border-color, #eaeaea)'
+          boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
+          border: '1px solid var(--border-color, #232334)',
+          color: '#000000'
         }}>
-          <h2 style={{ marginBottom: '12px', fontSize: '1.5rem' }}>Sign in to Decks</h2>
-          <p style={{ marginBottom: '24px', color: 'var(--text-muted, #666)' }}>
+          <h2 style={{ marginBottom: '12px', fontSize: '1.5rem', color: '#000000', fontWeight: 'bold' }}>
+            Sign in to Decks
+          </h2>
+          <p style={{ marginBottom: '24px', color: '#a0a0b8', fontSize: '0.9rem', lineHeight: '1.4' }}>
             Please sign in with Google to view and study your saved flashcard decks.
           </p>
 
@@ -457,9 +467,9 @@ export default function Decks() {
               padding: '12px 20px',
               backgroundColor: '#4285F4',
               color: '#ffffff',
-              border: 'none',
+              border: '1px solid #2b2b3d',
               borderRadius: '8px',
-              fontSize: '1rem',
+              fontSize: '0.95rem',
               fontWeight: '600',
               cursor: 'pointer',
               display: 'flex',

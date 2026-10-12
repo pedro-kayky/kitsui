@@ -231,11 +231,19 @@ export default function Translator() {
 
   if (!user) {
     return (
-      <div className="translator-container">
+      <div className="translator-container" style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '80vh',
+        width: '100%'
+      }}>
         <Mascot mood="explain" message="Please sign in to access Kitsui and save your cards safely!" title="Kitsui" />
         <div style={{
           maxWidth: '420px',
-          margin: '40px auto',
+          width: '100%',
+          margin: '20px auto',
           padding: '30px',
           textAlign: 'center',
           backgroundColor: 'var(--card-bg, #ffffff)',
@@ -243,8 +251,8 @@ export default function Translator() {
           boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
           border: '1px solid var(--border-color, #eaeaea)'
         }}>
-          <h2 style={{ marginBottom: '12px', fontSize: '1.5rem' }}>Sign in to Kitsui</h2>
-          <p style={{ marginBottom: '24px', color: 'var(--text-muted, #666)' }}>
+          <h2 style={{ marginBottom: '12px', fontSize: '1.5rem', color: '#1f2937' }}>Sign in to Kitsui</h2>
+          <p style={{ marginBottom: '24px', color: 'var(--text-muted, #666)', fontSize: '0.9rem' }}>
             You need to be signed in with your Google account to translate and store your decks securely in the cloud.
           </p>
           <button 
@@ -278,7 +286,6 @@ export default function Translator() {
       </div>
     );
   }
-
   return (
     <div className="translator-container">
       {notification && <div className="notification-toast">{notification}</div>}

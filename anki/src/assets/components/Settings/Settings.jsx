@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import Mascot from '../../assets/components/pet/Mascot';
+import Mascot from '../pet/Mascot';
 import './Settings.css';
 
 export default function Settings({ user, onLogin, onLogout }) {

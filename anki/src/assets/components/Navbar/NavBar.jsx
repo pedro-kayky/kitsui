@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { NavLink, Link, useNavigate } from 'react-router-dom';
 import { createClient } from '@supabase/supabase-js';
-import './NavBar.css';
+import './Navbar.css';
 import kitsuiLogo from '../imgs/logo.png';
 
  import { supabase } from '../supaBase/supaBaseClient'

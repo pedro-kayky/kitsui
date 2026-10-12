@@ -438,12 +438,12 @@ export default function Decks() {
         justifyContent: 'center',
         alignItems: 'center',
         minHeight: '80vh',
-        width: '100%',
+        width: '80%',
         padding: '20px'
       }}>
         <div style={{
           maxWidth: '420px',
-          width: '100%',
+          width: '80%',
           padding: '36px',
           textAlign: 'center',
           backgroundColor: '#ffffff',        

@@ -240,12 +240,12 @@ export default function Translator() {
         alignItems: 'center',
         justifyContent: 'center',
         minHeight: '80vh',
-        width: '100%'
+        width: '80%'
       }}>
         <Mascot mood="explain" message="Please sign in to access Kitsui and save your cards safely!" title="Kitsui" />
         <div style={{
           maxWidth: '420px',
-          width: '100%',
+          width: '80%',
           margin: '20px auto',
           padding: '30px',
           textAlign: 'center',

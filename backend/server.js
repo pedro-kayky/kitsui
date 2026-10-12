@@ -108,23 +108,37 @@ const GENERATION_CONFIG = {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Erros "passageiros": vale a pena tentar de novo.
-// 503 = Google sobrecarregado, 429 = muitos pedidos em pouco tempo.
-const isTemporaryError = (err) => err?.status === 503 || err?.status === 429;
+// Tempo máximo de espera por UM modelo e por TODA a busca (em milissegundos).
+// Sem isso, um modelo sobrecarregado pode demorar vários segundos para responder
+// o erro, e o pedido nunca chega nos modelos seguintes da lista.
+const MODEL_TIMEOUT_MS = 4000;
+const TOTAL_BUDGET_MS = 20000;
 
-// Percorre a lista de modelos na ordem. Cada modelo recebe até 2 tentativas
-// (esperando 1s entre elas) se o erro for passageiro. Se continuar falhando,
-// ou se o modelo não existir mais (404), passa para o próximo da lista.
-async function generateWithRetry(prompt, maxAttempts = 2) {
+// Erros "passageiros": vale a pena passar para o próximo modelo.
+// 503 = Google sobrecarregado, 429 = muitos pedidos em pouco tempo,
+// e também quando o modelo demora demais (timeout) ou a conexão cai.
+const isTemporaryError = (err) =>
+  err?.status === 503 ||
+  err?.status === 429 ||
+  /abort|timeout|timed out|fetch failed|econnreset/i.test(`${err?.name} ${err?.message}`);
+
+// Percorre a lista de modelos na ordem. Por padrão cada modelo recebe só 1
+// tentativa: se falhar (sobrecarga, timeout ou 404), passa direto para o próximo,
+// sem perder tempo. Se quiser repetir o mesmo modelo, aumente o maxAttempts.
+async function generateWithRetry(prompt, maxAttempts = 1) {
   const models = [...new Set(MODELS)];
+  const startedAt = Date.now();
   let lastError;
   let temporaryError; // guarda o último erro passageiro (503/429), se houver
 
   for (const modelName of models) {
-    const model = genAI.getGenerativeModel({
-      model: modelName,
-      generationConfig: GENERATION_CONFIG,
-    });
+    // Se o tempo total estourou, para de tentar novos modelos.
+    if (Date.now() - startedAt > TOTAL_BUDGET_MS) break;
+
+    const model = genAI.getGenerativeModel(
+      { model: modelName, generationConfig: GENERATION_CONFIG },
+      { timeout: MODEL_TIMEOUT_MS } // não deixa um modelo lento segurar a fila
+    );
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {

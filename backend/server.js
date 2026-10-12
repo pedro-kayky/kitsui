@@ -49,7 +49,7 @@ app.get('/', (req, res) => {
 app.get('/api/decks/recent-words', async (req, res) => {
   try {
     if (!supabase) {
-      return res.status(500).json({ error: 'Supabase não está configurado no servidor.' });
+      return res.status(500).json({ error: 'Supabase is not configured on the server.' });
     }
 
     const { data, error } = await supabase
@@ -71,7 +71,7 @@ app.post('/api/cards', async (req, res) => {
 
   try {
     if (!supabase) {
-      return res.status(500).json({ error: 'Supabase não está configurado no servidor.' });
+      return res.status(500).json({ error: 'Supabase is not configured on the server.' });
     }
 
     const { data, error } = await supabase
@@ -149,7 +149,7 @@ app.post('/api/translate', async (req, res) => {
   try {
     if (!genAI) {
       return res.status(500).json({
-        error: 'A chave GEMINI_API_KEY não está configurada no servidor.',
+        error: 'The GEMINI_API_KEY is not configured on the server.',
       });
     }
 
@@ -161,7 +161,7 @@ app.post('/api/translate', async (req, res) => {
 
     if (!word || !word.trim()) {
       return res.status(400).json({
-        error: 'Por favor, digite uma palavra ou frase.',
+        error: 'Please enter a word or phrase.',
       });
     }
 
@@ -243,12 +243,12 @@ Rules:
     // devolve uma mensagem amigável para o usuário.
     if (isTemporaryError(error)) {
       return res.status(503).json({
-        error: 'O serviço de IA está muito ocupado agora. Tente novamente em alguns segundos.',
+        error: 'The AI service is very busy right now. Please try again in a few seconds.',
       });
     }
 
     res.status(500).json({
-      error: error.message || 'Ocorreu um erro ao processar a tradução.',
+      error: error.message || 'An error occurred while processing the translation.',
     });
   }
 });

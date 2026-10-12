@@ -4,7 +4,7 @@ import Home from "../home/home";
 import Review from "../review/Review";
 import Progress from "../progress/Progress";
 import Decks from "../deck/decks";
-import SignInPrompt from "../Settings/Settings";
+import SignInPrompt from "../Settings/settings";
 import NavBar from "../../assets/components/Navbar/NavBar";
 
 const AppRoutes = () => {

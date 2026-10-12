@@ -32,6 +32,7 @@ export default function Translator() {
   });
 
   const [loading, setLoading] = useState(false);
+  const [slowNotice, setSlowNotice] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showExamples, setShowExamples] = useState(false);
@@ -141,9 +142,15 @@ export default function Translator() {
 
     setLoading(true);
     setError(null);
+    setSlowNotice(false);
 
+    // Quando a IA está sobrecarregada, o servidor pode levar até ~27s para
+    // trocar de modelo até achar um que responda. Por isso o limite do front é 30s.
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    // Depois de 4s sem resposta, avisa o usuário que vai demorar mais que o normal.
+    const slowTimerId = setTimeout(() => setSlowNotice(true), 4000);
 
     try {
       const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000';
@@ -155,8 +162,7 @@ export default function Translator() {
         signal: controller.signal
       });
 
-      clearTimeout(timeoutId);
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         throw new Error(data.error || `HTTP Error: ${response.status}`);
@@ -165,11 +171,18 @@ export default function Translator() {
       setCardData(data);
     } catch (err) {
       if (err.name === 'AbortError') {
-        setError('The search took too long (Timeout).');
+        setError('The AI is taking too long because it is receiving a lot of requests right now. Please wait a moment and try again.');
+      } else if (err instanceof TypeError) {
+        // fetch falhou antes de receber resposta (sem internet ou backend desligado)
+        setError('Could not reach the server. Please check your connection or whether the backend is running.');
       } else {
-        setError('An error occurred while searching. Please check if your backend server is running.');
+        // Mensagem enviada pelo servidor (ex.: "The AI is receiving a lot of requests...")
+        setError(err.message);
       }
     } finally {
+      clearTimeout(timeoutId);
+      clearTimeout(slowTimerId);
+      setSlowNotice(false);
       setLoading(false);
     }
   };
@@ -296,7 +309,13 @@ export default function Translator() {
 
       <Mascot 
         mood={loading ? 'searching' : 'explain'} 
-        message={loading ? 'Searching the deep corners of memory...' : null}
+        message={
+          loading
+            ? slowNotice
+              ? 'The AI is receiving a lot of requests, so this is taking a bit longer. Hang on, I am trying another one...'
+              : 'Searching the deep corners of memory...'
+            : null
+        }
         title="Kitsui" 
       />
 

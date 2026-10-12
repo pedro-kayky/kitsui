@@ -111,8 +111,22 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // Tempo máximo de espera por UM modelo e por TODA a busca (em milissegundos).
 // Sem isso, um modelo sobrecarregado pode demorar vários segundos para responder
 // o erro, e o pedido nunca chega nos modelos seguintes da lista.
-const MODEL_TIMEOUT_MS = 4000;
+const MODEL_TIMEOUT_MS = 7000;
 const TOTAL_BUDGET_MS = 20000;
+
+// "Castigo": quando um modelo falha por sobrecarga/timeout, ele é pulado nos
+// próximos pedidos por 1 minuto (e por 10 minutos se der 404). Assim o site
+// não perde vários segundos testando modelos que acabaram de falhar.
+const COOLDOWN_MS = 60 * 1000;
+const NOT_FOUND_COOLDOWN_MS = 10 * 60 * 1000;
+const modelCooldown = new Map(); // nome do modelo -> até quando pular
+
+const availableModels = () => {
+  const now = Date.now();
+  const available = MODELS.filter((m) => (modelCooldown.get(m) || 0) <= now);
+  // Se todos estiverem de castigo, tenta todos mesmo assim.
+  return available.length > 0 ? available : MODELS;
+};
 
 // Erros "passageiros": vale a pena passar para o próximo modelo.
 // 503 = Google sobrecarregado, 429 = muitos pedidos em pouco tempo,
@@ -126,7 +140,7 @@ const isTemporaryError = (err) =>
 // tentativa: se falhar (sobrecarga, timeout ou 404), passa direto para o próximo,
 // sem perder tempo. Se quiser repetir o mesmo modelo, aumente o maxAttempts.
 async function generateWithRetry(prompt, maxAttempts = 1) {
-  const models = [...new Set(MODELS)];
+  const models = [...new Set(availableModels())];
   const startedAt = Date.now();
   let lastError;
   let temporaryError; // guarda o último erro passageiro (503/429), se houver
@@ -142,10 +156,18 @@ async function generateWithRetry(prompt, maxAttempts = 1) {
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        return await model.generateContent(prompt);
+        const result = await model.generateContent(prompt);
+        console.log(`OK com ${modelName} (${Date.now() - startedAt}ms no total)`);
+        return result;
       } catch (err) {
         lastError = err;
         if (isTemporaryError(err)) temporaryError = err;
+        if (err.status === 404 || isTemporaryError(err)) {
+          modelCooldown.set(
+            modelName,
+            Date.now() + (err.status === 404 ? NOT_FOUND_COOLDOWN_MS : COOLDOWN_MS)
+          );
+        }
         console.warn(
           `Falha com ${modelName} (tentativa ${attempt}/${maxAttempts}): ${err.status || ''} ${err.message}`
         );
@@ -271,7 +293,7 @@ Rules:
     // devolve uma mensagem amigável para o usuário.
     if (isTemporaryError(error)) {
       return res.status(503).json({
-        error: 'The AI service is very busy right now. Please try again in a few seconds.',
+        error: 'The AI is receiving a lot of requests right now. Please wait a few seconds and try again.',
       });
     }
 

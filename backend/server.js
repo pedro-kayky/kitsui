@@ -19,7 +19,7 @@ if (!apiKey) {
   console.error('ERRO: GEMINI_API_KEY não foi encontrada no arquivo .env');
 }
 
-const genAI = apiKey ? new GoogleGenerativeAI({ apiKey: apiKey }) : null;
+const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
 
 // Inicializar o Supabase com as chaves do .env
 const supabaseUrl = process.env.SUPABASE_URL;

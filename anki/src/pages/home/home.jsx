@@ -20,6 +20,7 @@ const LANGUAGES = [
   { code: 'my', name: 'Burmese', label: 'မြန်မာ (Myanmar / Burmese)' },
   { code: 'mn', name: 'Mongolian', label: 'Монгол (Mongolian)' }
 ];
+
 export default function Translator() {
   const [word, setWord] = useState(() => localStorage.getItem('linguaDeck_lastWord') || '');
   const [sourceLang, setSourceLang] = useState(() => localStorage.getItem('linguaDeck_sourceLang') || 'Japonês');
@@ -145,7 +146,9 @@ export default function Translator() {
     const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/translate', {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000';
+      
+      const response = await fetch(`${API_URL}/api/translate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ word, sourceLang, targetLang }),
@@ -286,6 +289,7 @@ export default function Translator() {
       </div>
     );
   }
+
   return (
     <div className="translator-container">
       {notification && <div className="notification-toast">{notification}</div>}

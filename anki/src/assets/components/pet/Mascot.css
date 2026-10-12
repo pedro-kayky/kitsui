@@ -1,0 +1,86 @@
+/* Container for the character portrait and the dialogue box */
+.rpg-dialogue-container {
+  display: flex;
+  align-items: flex-end;
+  position: relative;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto 32px auto;
+  padding-top: 20px;
+}
+
+/* Larger character portrait overlapping the bottom-left */
+.rpg-portrait-wrapper {
+  width: 130px;
+  height: 140px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+  margin-right: -15px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.rpg-portrait-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.6));
+}
+
+/* Classic RPG text box frame */
+.rpg-dialogue-box {
+  position: relative;
+  flex: 1;
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  border: 2px solid #f59e0b; /* Golden border */
+  border-radius: 12px;
+  padding: 16px 20px 18px 28px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), inset 0 0 12px rgba(245, 158, 11, 0.15);
+  min-height: 95px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Name Tag badge inside dialogue box */
+.rpg-name-tag {
+  position: absolute;
+  top: -14px;
+  left: 20px;
+  background: #f59e0b;
+  color: #0f172a;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 10px;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* Dialogue Text */
+.rpg-dialogue-text {
+  margin: 6px 0 0 0;
+  color: #f8fafc;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  font-weight: 500;
+  font-family: inherit;
+}
+
+/* Little bouncing arrow at the bottom right of dialogue */
+.rpg-continue-indicator {
+  position: absolute;
+  bottom: 8px;
+  right: 14px;
+  color: #f59e0b;
+  font-size: 0.7rem;
+  animation: rpgBouncingArrow 1s infinite alternate;
+}
+
+@keyframes rpgBouncingArrow {
+  from { transform: translateY(0); opacity: 0.6; }
+  to { transform: translateY(4px); opacity: 1; }
+}

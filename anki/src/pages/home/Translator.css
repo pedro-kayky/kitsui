@@ -1,0 +1,360 @@
+/* ==========================================
+   CONTAINER PRINCIPAL
+   ========================================== */
+.translator-container {
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 16px;
+  /* Espaço no fundo para não cobrir o conteúdo caso o menu/footer seja fixo */
+  padding-bottom: 90px;
+  box-sizing: border-box;
+  color: var(--text-main);
+}
+/* Estilização para o Furigana (<ruby> e <rt>) */
+/* Estilização essencial para o Furigana funcionar visualmente */
+ruby {
+  display: inline-flex;
+  flex-direction: column-reverse;
+  vertical-align: bottom;
+  text-align: center;
+  margin: 0 2px;
+}
+
+rt {
+  display: block;
+  font-size: 0.6em;
+  color: #818cf8; /* Cor de destaque para a leitura */
+  font-weight: 500;
+  line-height: 1;
+  user-select: none;
+  text-align: center;
+}
+
+.furigana-text {
+  font-size: 1.2rem;
+  line-height: 2;
+  margin-bottom: 8px;
+}
+
+/* ==========================================
+   CAIXA DE PESQUISA E SELETORES
+   ========================================== */
+.search-box {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.translator-input {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 1rem;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-main);
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.translator-input:focus {
+  outline: none;
+  border-color: var(--btn-primary-border);
+}
+
+/* Seletores de Idioma Otimizados para Celular */
+.lang-selectors {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.translator-select {
+  flex: 1;
+  min-width: 0; /* Impede o select de vazar para fora no mobile */
+  width: 100%;
+  padding: 10px;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-main);
+  font-size: 0.85rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.lang-arrow {
+  color: var(--text-muted);
+  font-weight: bold;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+/* Botão Principal de Busca */
+.translator-btn-primary {
+  width: 100%;
+  padding: 12px;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  border: 1px solid var(--btn-primary-border);
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.translator-btn-primary:hover {
+  opacity: 0.9;
+}
+
+.translator-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ==========================================
+   CARTÃO DA PALAVRA PRINCIPAL
+   ========================================== */
+.word-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.reading {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.main-word {
+  font-size: 2.2rem;
+  font-weight: 700;
+  margin: 0 0 12px 0;
+  color: var(--text-main);
+}
+
+/* Tags / Significados */
+.tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.tag {
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-weight: 500;
+}
+
+.tag-highlight {
+  background-color: var(--tag-highlight-bg);
+  color: var(--tag-highlight-text);
+}
+
+.tag-muted {
+  background-color: var(--tag-muted-bg);
+  color: var(--tag-muted-text);
+}
+
+/* Botão Secundário (+ Add Word) */
+.translator-btn-secondary {
+  width: 100%;
+  padding: 10px;
+  background-color: transparent;
+  border: 1px solid var(--btn-primary-border);
+  color: var(--tag-highlight-text);
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.translator-btn-secondary:hover {
+  background-color: var(--tag-highlight-bg);
+}
+
+/* ==========================================
+   CARTÃO DE EXEMPLOS DA IA
+   ========================================== */
+.ai-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.ai-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 8px;
+}
+
+.example-item {
+  margin-bottom: 12px;
+}
+
+.source-text {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--text-main);
+  margin: 0 0 4px 0;
+  line-height: 1.4;
+}
+
+.target-text {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* Botão de Adicionar Exemplo */
+.add-example-btn {
+  background-color: transparent;
+  border: 1px solid #10b981;
+  color: #10b981;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.add-example-btn:hover {
+  background-color: #10b981;
+  color: #ffffff;
+}
+
+.toggle-examples-btn {
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--tag-highlight-text);
+  font-size: 0.85rem;
+  padding: 8px 0;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  border-top: 1px dashed var(--border-color);
+}
+
+/* ==========================================
+   FURIGANA (<ruby>) E ANKI PREVIEW
+   ========================================== */
+ruby {
+  display: inline-flex;
+  flex-direction: column-reverse;
+  vertical-align: bottom;
+  text-align: center;
+}
+
+rt {
+  font-size: 0.65em;
+  color: var(--btn-audio-icon);
+  font-weight: normal;
+  line-height: 1;
+  margin-bottom: 2px;
+}
+
+.anki-preview-box {
+  margin-top: 8px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  border-top: 1px dashed var(--border-color);
+  padding-top: 6px;
+}
+
+/* Ajustes em Celulares Muito Pequenos */
+@media (max-width: 380px) {
+  .lang-selectors {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .lang-arrow {
+    transform: rotate(90deg);
+  }
+}
+/* Seletor do Deck de Destino */
+.target-deck-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 10px;
+  box-sizing: border-box;
+}
+
+.target-deck-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted, #888);
+  white-space: nowrap;
+}
+
+.deck-selector {
+  flex: 1;
+  width: 100%;
+  background-color: var(--bg-card, #1e1f2b);
+  color: var(--text-main, #ffffff);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 0.9rem;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.deck-selector:focus {
+  border-color: var(--btn-primary-border, #6366f1);
+}
+.notification-toast {
+  position: fixed;
+  bottom: 80px; /* Fica acima da barra de navegação no telemóvel */
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #10b981; /* Verde sucesso */
+  color: #ffffff;
+  padding: 10px 20px;
+  border-radius: 9999px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1100;
+  animation: fadeInOut 3s ease forwards;
+}
+
+@keyframes fadeInOut {
+  0% { opacity: 0; transform: translate(-50%, 10px); }
+  15% { opacity: 1; transform: translate(-50%, 0); }
+  85% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -10px); }
+}

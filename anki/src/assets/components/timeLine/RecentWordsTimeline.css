@@ -1,0 +1,154 @@
+.timeline-card-clean,
+.timeline-card-clean * {
+  box-sizing: border-box;
+}
+
+.timeline-card-clean {
+  background: #171722;
+  border: 1px solid #2b2b3d;
+  border-radius: 16px;
+  padding: 18px;
+  color: #fff;
+  width: 100%; /* Adapta-se perfeitamente à largura da sidebar */
+  overflow: hidden; /* Impede que qualquer elemento saia da div */
+}
+
+.timeline-header-clean {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.timeline-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.timeline-title-row h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #fff;
+  margin: 0;
+}
+
+.timeline-icon {
+  font-size: 0.9rem;
+}
+
+.timeline-see-all {
+  font-size: 0.8rem;
+  color: #8b8ba7;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.timeline-see-all:hover {
+  color: #6c5ce7;
+}
+
+/* Caixa de pesquisa */
+.quick-search-box {
+  width: 100%;
+  margin-bottom: 14px;
+}
+
+.timeline-search-input {
+  width: 100%;
+  background: #111118;
+  border: 1px solid #2b2b3d;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.timeline-search-input:focus {
+  border-color: #6c5ce7;
+}
+
+.search-result-status {
+  font-size: 0.75rem;
+  margin-top: 4px;
+}
+
+.found-yes {
+  color: #f1c40f;
+}
+
+.found-no {
+  color: #2ed573;
+}
+
+/* Linhas individuais da timeline */
+.timeline-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.timeline-row-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.88rem;
+}
+
+.timeline-row-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.status-dot.yellow { background-color: #f1c40f; }
+.status-dot.green { background-color: #2ed573; }
+.status-dot.red { background-color: #ff4757; }
+
+.word-main {
+  font-weight: 600;
+  color: #fff;
+}
+
+.word-sub-reading {
+  color: #8b8ba7;
+  font-size: 0.82rem;
+}
+
+.timeline-row-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.level-badge-tag {
+  background: #232333;
+  color: #b0b0c3;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.time-ago-text {
+  font-size: 0.75rem;
+  color: #71718a;
+  min-width: 48px;
+  text-align: right;
+}
+
+.timeline-empty {
+  font-size: 0.82rem;
+  color: #71718a;
+  text-align: center;
+  padding: 10px 0;
+}

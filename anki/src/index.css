@@ -1,0 +1,54 @@
+:root {
+  /* --- Light Mode --- */
+  --bg-page: #f0f9ff;
+  --bg-card: #ffffff;
+  --bg-input: #f1f5f9;
+  --border-color: #e2e8f0;
+
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+
+  --tag-highlight-bg: #e0e7ff;
+  --tag-highlight-text: #4338ca;
+  --tag-muted-bg: #f1f5f9;
+  --tag-muted-text: #64748b;
+
+  --btn-audio-bg: #e0e7ff;
+  --btn-audio-icon: #4338ca;
+
+  --btn-primary-bg: linear-gradient(135deg, #4f46e5, #4338ca);
+  --btn-primary-text: #ffffff;
+  --btn-primary-border: #4338ca;
+
+  
+}
+
+body.dark-theme {
+  /* --- Dark Mode --- */
+  --bg-page: #090a0f;
+  --bg-card: #161822;
+  --bg-input: #121318;
+  --border-color: #2a2d3d;
+
+  --text-main: #f1f5f9;
+  --text-muted: #94a3b8;
+
+  --tag-highlight-bg: #272a45;
+  --tag-highlight-text: #a5b4fc;
+  --tag-muted-bg: #1e202e;
+  --tag-muted-text: #64748b;
+
+  --btn-audio-bg: #272a45;
+  --btn-audio-icon: #818cf8;
+
+  --btn-primary-bg: linear-gradient(135deg, #1e1b4b, #311b92);
+  --btn-primary-text: #ffffff;
+  --btn-primary-border: #6366f1;
+}
+
+/* Garante que o fundo e o texto da página inteira reagem ao tema */
+body {
+  background-color: var(--bg-page);
+  color: var(--text-main);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}

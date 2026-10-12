@@ -4,37 +4,35 @@ import Home from "../home/home";
 import Review from "../review/Review";
 import Progress from "../progress/Progress";
 import Decks from "../deck/decks";
-import SignInPrompt from "../Settings/settings";
+import Settings from "../Settings/settings";
 import NavBar from "../../assets/components/Navbar/NavBar";
+import { supabase } from '../../assets/components/supaBase/supaBaseClient'
 
 const AppRoutes = () => {
-  // Estado global do Utilizador (lê do localStorage se já tiver sessão iniciada)
-  const [user, setUser] = useState(() => {
-    const savedUser = localStorage.getItem("linguaDeck_user");
-    return savedUser ? JSON.parse(savedUser) : null;
-  });
+  const [user, setUser] = useState(null);
 
-  // Função para efetuar Login / Registo
-  const handleLogin = (credentials) => {
-    // Exemplo de estrutura do utilizador (futuramente conectado à tua API/Backend)
-    const userData = {
-      name: credentials.name || "Student",
-      email: credentials.email,
-      isPremium: false
-    };
-    setUser(userData);
-    localStorage.setItem("linguaDeck_user", JSON.stringify(userData));
-  };
+  useEffect(() => {
+    // 1. Obtém a sessão inicial do Supabase
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user || null);
+    });
 
-  // Função para Terminar Sessão (Logout)
-  const handleLogout = () => {
+    // 2. Escuta mudanças na autenticação (login, logout, refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem("linguaDeck_user");
   };
 
   return (
     <BrowserRouter>
-      {/* Passa as props do utilizador para a NavBar abrir o menu corretamente */}
+      {/* Passa o utilizador global para a NavBar */}
       <NavBar user={user} onLogout={handleLogout} />
 
       <Routes>
@@ -43,10 +41,10 @@ const AppRoutes = () => {
         <Route path="/review" element={<Review />} />
         <Route path="/progress" element={<Progress />} />
         
-        {/* 2. Adiciona a rota de Settings aqui */}
+        {/* Rota de Settings/Profile a receber o mesmo utilizador */}
         <Route 
           path="/settings" 
-          element={<SignInPrompt user={user} onLogin={handleLogin} onLogout={handleLogout} />} 
+          element={<Settings user={user} onLogout={handleLogout} />} 
         />
       </Routes>
     </BrowserRouter>

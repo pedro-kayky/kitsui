@@ -21,6 +21,12 @@ if (!apiKey) {
 
 const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
 
+// Modelos do Gemini. Dá pra trocar pelo Render (Environment) sem mexer no código:
+//   GEMINI_MODEL           -> modelo principal
+//   GEMINI_FALLBACK_MODEL  -> modelo reserva, usado se o principal falhar
+const PRIMARY_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-2.5-flash';
+
 // Inicializar o Supabase com as chaves do .env
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
@@ -81,6 +87,61 @@ app.post('/api/cards', async (req, res) => {
 });
 
 // ==========================================
+// FUNÇÕES AUXILIARES DA IA (retry + modelo reserva)
+// ==========================================
+
+const GENERATION_CONFIG = {
+  temperature: 0.1,
+  maxOutputTokens: 900,
+  responseMimeType: 'application/json',
+};
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Erros "passageiros": vale a pena tentar de novo.
+// 503 = Google sobrecarregado, 429 = muitos pedidos em pouco tempo.
+const isTemporaryError = (err) => err?.status === 503 || err?.status === 429;
+
+// Tenta gerar o conteúdo com o modelo principal e, se ele não der conta,
+// passa para o modelo reserva. Cada modelo recebe até 3 tentativas
+// (esperando 1s, depois 2s entre elas).
+async function generateWithRetry(prompt, maxAttempts = 3) {
+  const models = [...new Set([PRIMARY_MODEL, FALLBACK_MODEL])];
+  let lastError;
+
+  for (const modelName of models) {
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      generationConfig: GENERATION_CONFIG,
+    });
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await model.generateContent(prompt);
+      } catch (err) {
+        lastError = err;
+        console.warn(
+          `Falha com ${modelName} (tentativa ${attempt}/${maxAttempts}): ${err.status || ''} ${err.message}`
+        );
+
+        // Modelo não existe mais (404): não adianta tentar de novo, vai pro reserva.
+        if (err.status === 404) break;
+
+        // Erro que não é passageiro (ex.: chave inválida, pedido mal formado): para tudo.
+        if (!isTemporaryError(err)) throw err;
+
+        // Erro passageiro: espera um pouco e tenta de novo.
+        if (attempt < maxAttempts) {
+          await sleep(1000 * 2 ** (attempt - 1));
+        }
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+// ==========================================
 // ROTA DA IA (Tradução e Geração de Flashcards)
 // ==========================================
 
@@ -103,15 +164,6 @@ app.post('/api/translate', async (req, res) => {
         error: 'Por favor, digite uma palavra ou frase.',
       });
     }
-
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-3.6-flash',
-      generationConfig: {
-        temperature: 0.1,
-        maxOutputTokens: 900,
-        responseMimeType: 'application/json',
-      },
-    });
 
     const prompt = `
 You are the linguistic assistant for LinguaDeck, a language-learning app.
@@ -156,7 +208,7 @@ Rules:
 10. Return strictly valid JSON only, without markdown code fences or extra text.
 `;
 
-    const result = await model.generateContent(prompt);
+    const result = await generateWithRetry(prompt);
     let responseText = result.response.text().trim();
 
     responseText = responseText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
@@ -186,6 +238,15 @@ Rules:
     res.json(normalizedData);
   } catch (error) {
     console.error('Erro ao processar tradução:', error);
+
+    // Se mesmo com retry e modelo reserva o Google continuou sobrecarregado,
+    // devolve uma mensagem amigável para o usuário.
+    if (isTemporaryError(error)) {
+      return res.status(503).json({
+        error: 'O serviço de IA está muito ocupado agora. Tente novamente em alguns segundos.',
+      });
+    }
+
     res.status(500).json({
       error: error.message || 'Ocorreu um erro ao processar a tradução.',
     });
@@ -195,5 +256,7 @@ Rules:
 app.listen(PORT, () => {
   console.log(`\n=================================`);
   console.log(`🚀 Backend running on port ${PORT}`);
+  console.log(`   Modelo principal: ${PRIMARY_MODEL}`);
+  console.log(`   Modelo reserva:   ${FALLBACK_MODEL}`);
   console.log(`=================================\n`);
 });

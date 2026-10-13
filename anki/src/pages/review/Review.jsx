@@ -1,12 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Mascot from '../../assets/components/pet/Mascot';
+import { supabase } from '../../assets/components/supaBase/supaBaseClient';
 import './Review.css';
 
 export default function Review({ onFinish }) {
-  const [userDecks, setUserDecks] = useState({});
-  const [selectedDeck, setSelectedDeck] = useState('');
+  // Sessão do usuário e carregamento
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+  const loadedUserId = useRef(null); // evita recarregar tudo à toa quando a sessão é "renovada"
+
+  // Decks e cartas vindos do Supabase
+  const [userDecks, setUserDecks] = useState([]); // [{ id, name, ... }]
+  const [cardsByDeck, setCardsByDeck] = useState({}); // { deckId: [cartas] }
+  const [selectedDeckId, setSelectedDeckId] = useState('');
   const [cardsToReview, setCardsToReview] = useState([]);
-  
+
   // Estados da Sessão de Estudo
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -26,20 +35,82 @@ export default function Review({ onFinish }) {
     wrong: 0
   });
 
-  // Carrega os Decks do localStorage
-  useEffect(() => {
-    const savedDecks = JSON.parse(localStorage.getItem('linguaDeck_userDecks') || '{}');
-    setUserDecks(savedDecks);
+  // Carrega os decks e as cartas do usuário no Supabase
+  const loadDecksAndCards = async (userId) => {
+    setLoading(true);
+    setLoadError(null);
 
-    const deckNames = Object.keys(savedDecks);
-    if (deckNames.length > 0) {
-      setSelectedDeck(deckNames[0]);
+    const [decksRes, cardsRes] = await Promise.all([
+      supabase.from('decks').select('*').eq('user_id', userId),
+      supabase.from('cards').select('*').eq('user_id', userId)
+    ]);
+
+    if (decksRes.error || cardsRes.error) {
+      console.error('Error loading review data:', decksRes.error || cardsRes.error);
+      loadedUserId.current = null;
+      setLoadError('Could not load your decks. Please try again.');
+      setLoading(false);
+      return;
     }
+
+    // Agrupa as cartas por deck
+    const grouped = {};
+    (cardsRes.data || []).forEach((card) => {
+      if (!grouped[card.deck_id]) grouped[card.deck_id] = [];
+      grouped[card.deck_id].push(card);
+    });
+
+    const decks = decksRes.data || [];
+    setUserDecks(decks);
+    setCardsByDeck(grouped);
+
+    if (decks.length > 0) {
+      // Usa o mesmo deck escolhido na aba Translator, se ele ainda existir
+      const savedId = localStorage.getItem('linguaDeck_selectedDeckId');
+      const exists = decks.some((d) => String(d.id) === String(savedId));
+      setSelectedDeckId(exists ? String(savedId) : String(decks[0].id));
+    } else {
+      setSelectedDeckId('');
+    }
+
+    setLoading(false);
+  };
+
+  // Espera o login terminar e recarrega quando o usuário muda (igual ao Translator)
+  useEffect(() => {
+    const handleSession = (session) => {
+      if (session?.user) {
+        setUser(session.user);
+        if (loadedUserId.current !== session.user.id) {
+          loadedUserId.current = session.user.id;
+          loadDecksAndCards(session.user.id);
+        }
+      } else {
+        loadedUserId.current = null;
+        setUser(null);
+        setUserDecks([]);
+        setCardsByDeck({});
+        setSelectedDeckId('');
+        setLoading(false);
+      }
+    };
+
+    supabase.auth.getSession().then(({ data: { session } }) => handleSession(session));
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      handleSession(session);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  const selectedDeck = userDecks.find((d) => String(d.id) === String(selectedDeckId));
+  const selectedDeckName = selectedDeck?.name || 'your deck';
+  const selectedDeckCount = (cardsByDeck[selectedDeckId] || []).length;
 
   // Iniciar a sessão de estudo com o Deck selecionado
   const handleStartSession = () => {
-    const deck = userDecks[selectedDeck] || [];
+    const deck = cardsByDeck[selectedDeckId] || [];
     if (deck.length === 0) return;
 
     // Embaralha os cartões para a sessão
@@ -54,7 +125,7 @@ export default function Review({ onFinish }) {
 
     setMascotState({
       mood: 'study',
-      message: `Let's review ${selectedDeck}! Take your time with each card.`
+      message: `Let's review ${selectedDeckName}! Take your time with each card.`
     });
   };
 
@@ -68,7 +139,9 @@ export default function Review({ onFinish }) {
     setStats(prev => ({ ...prev, wrong: prev.wrong + 1 }));
 
     // Coloca o cartão atual no final da fila para praticar novamente na mesma sessão
+    // e avança para o próximo (sempre existe um, porque acabamos de adicionar este no fim)
     setCardsToReview(prev => [...prev, currentCard]);
+    setCurrentIndex(prev => prev + 1);
 
     if (nextErrors >= 3) {
       // 🚨 GATILHO: 3 Erros Seguidos!
@@ -118,8 +191,6 @@ export default function Review({ onFinish }) {
 
   // 1. Tela de Seleção de Deck (antes de iniciar o review)
   if (!sessionStarted) {
-    const deckNames = Object.keys(userDecks);
-
     return (
       <div className="review-container">
         <Mascot mood="study" title="Kitsui" />
@@ -128,28 +199,49 @@ export default function Review({ onFinish }) {
           <h2>Review Sessions</h2>
           <p>Select a deck to test your knowledge with interactive flashcards:</p>
 
-          {deckNames.length === 0 ? (
+          {loading ? (
+            <p>Loading your decks...</p>
+          ) : loadError ? (
+            <div className="empty-deck-notice">
+              <p>{loadError}</p>
+              {user && (
+                <button
+                  onClick={() => {
+                    loadedUserId.current = user.id;
+                    loadDecksAndCards(user.id);
+                  }}
+                  className="start-review-btn"
+                >
+                  Try again
+                </button>
+              )}
+            </div>
+          ) : !user ? (
+            <div className="empty-deck-notice">
+              <p>Please sign in on the <strong>Translator</strong> tab to review your decks.</p>
+            </div>
+          ) : userDecks.length === 0 ? (
             <div className="empty-deck-notice">
               <p>No decks found. Go to the <strong>Translator</strong> or <strong>Decks</strong> tab to add new words!</p>
             </div>
           ) : (
             <div className="deck-select-group">
-              <select 
-                value={selectedDeck} 
-                onChange={(e) => setSelectedDeck(e.target.value)}
+              <select
+                value={selectedDeckId}
+                onChange={(e) => setSelectedDeckId(e.target.value)}
                 className="review-deck-select"
               >
-                {deckNames.map(name => (
-                  <option key={name} value={name}>
-                    {name} ({userDecks[name].length} cards)
+                {userDecks.map((deck) => (
+                  <option key={deck.id} value={String(deck.id)}>
+                    {deck.name} ({(cardsByDeck[deck.id] || []).length} cards)
                   </option>
                 ))}
               </select>
 
-              <button 
+              <button
                 onClick={handleStartSession}
                 className="start-review-btn"
-                disabled={!selectedDeck || userDecks[selectedDeck]?.length === 0}
+                disabled={!selectedDeckId || selectedDeckCount === 0}
               >
                 Start Study Session 🚀
               </button>
@@ -179,8 +271,8 @@ export default function Review({ onFinish }) {
             </div>
           </div>
 
-          <button 
-            onClick={() => setSessionStarted(false)} 
+          <button
+            onClick={() => setSessionStarted(false)}
             className="finish-session-btn"
           >
             Back to Deck Selection
@@ -199,16 +291,16 @@ export default function Review({ onFinish }) {
   return (
     <div className="review-container">
       {/* 🦊 Mascote Reativo */}
-      <Mascot 
-        mood={mascotState.mood} 
-        message={mascotState.message} 
-        title="Kitsui" 
+      <Mascot
+        mood={mascotState.mood}
+        message={mascotState.message}
+        title="Kitsui"
       />
 
       <div className="flashcard-wrapper">
         <div className="progress-header">
           <span>Card {currentIndex + 1} of {cardsToReview.length}</span>
-          <span className="deck-tag">{selectedDeck}</span>
+          <span className="deck-tag">{selectedDeckName}</span>
         </div>
 
         {/* Flashcard Box */}
@@ -232,8 +324,8 @@ export default function Review({ onFinish }) {
 
         {/* Controles de Resposta */}
         {!showAnswer ? (
-          <button 
-            onClick={() => setShowAnswer(true)} 
+          <button
+            onClick={() => setShowAnswer(true)}
             className="show-answer-btn"
           >
             Show Answer

@@ -1,6 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './Progress.css';
-import Mascot from '../../assets/components/pet/Mascot'
+import Mascot from '../../assets/components/pet/Mascot';
+import { supabase } from '../../assets/components/supaBase/supaBaseClient';
+
+// Lê os campos de agendamento (estilo Anki) da carta.
+// Funciona tanto se forem colunas da tabela quanto se estiverem dentro de "data".
+// Se a carta não tiver esses campos, ela conta como "New".
+const getDueDate = (card) =>
+  card.due_date ?? card.dueDate ?? card.data?.dueDate ?? card.data?.due_date ?? null;
+const getInterval = (card) =>
+  Number(card.interval ?? card.data?.interval ?? 0) || 0;
 
 export default function Progress() {
   const [totalCards, setTotalCards] = useState(0);
@@ -12,64 +21,115 @@ export default function Progress() {
   const [streak, setStreak] = useState(0);
   const [totalReviewed, setTotalReviewed] = useState(0);
 
-  // Função principal para carregar os dados reais do localStorage
-  const loadProgressData = () => {
-    const savedDecks = JSON.parse(localStorage.getItem('linguaDeck_userDecks') || '{}');
-    const savedStreak = Number(localStorage.getItem('lingua_streak')) || 0;
-    const savedReviews = Number(localStorage.getItem('lingua_reviews_count')) || 0;
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+  const loadedUserId = useRef(null); // evita recarregar à toa quando a sessão é "renovada"
 
+  // Streak e total de revisões ainda vêm do navegador (localStorage)
+  const loadLocalStats = () => {
+    setStreak(Number(localStorage.getItem('lingua_streak')) || 0);
+    setTotalReviewed(Number(localStorage.getItem('lingua_reviews_count')) || 0);
+  };
+
+  const resetCounts = () => {
+    setTotalCards(0);
+    setNewCardsCount(0);
+    setReviewCardsCount(0);
+    setLearnedCardsCount(0);
+    setHardCardsCount(0);
+  };
+
+  // Carrega as cartas reais da conta no Supabase e calcula as estatísticas
+  const loadCards = async (userId, silent = false) => {
+    if (!silent) setLoading(true);
+    setLoadError(null);
+
+    const { data, error } = await supabase
+      .from('cards')
+      .select('*')
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Error loading progress data:', error);
+      loadedUserId.current = null;
+      setLoadError('Could not load your progress. Please reload the page.');
+      setLoading(false);
+      return;
+    }
+
+    const cards = data || [];
     const now = new Date();
 
-    let total = 0;
     let newCount = 0;
     let reviewCount = 0;
     let learnedCount = 0;
     let hardCount = 0;
 
-    // Percorre todos os decks e cartões reais do Decks.jsx
-    Object.values(savedDecks).forEach((cardsArray) => {
-      if (Array.isArray(cardsArray)) {
-        total += cardsArray.length;
+    cards.forEach((card) => {
+      // Classificação por estado do cartão
+      const dueDateRaw = getDueDate(card);
+      if (!dueDateRaw) {
+        newCount++;
+      } else {
+        const dueDate = new Date(dueDateRaw);
+        if (dueDate <= now) {
+          reviewCount++;
+        }
+      }
 
-        cardsArray.forEach((card) => {
-          // Classificação por estado do cartão
-          if (!card.dueDate) {
-            newCount++;
-          } else {
-            const dueDate = new Date(card.dueDate);
-            if (dueDate <= now) {
-              reviewCount++;
-            }
-          }
-
-          // Cartões Aprendidos vs Difíceis
-          if (card.interval >= 3) {
-            learnedCount++;
-          } else if (card.interval > 0 && card.interval < 3) {
-            hardCount++;
-          }
-        });
+      // Cartões Aprendidos vs Difíceis
+      const interval = getInterval(card);
+      if (interval >= 3) {
+        learnedCount++;
+      } else if (interval > 0 && interval < 3) {
+        hardCount++;
       }
     });
 
-    setTotalCards(total);
+    setTotalCards(cards.length);
     setNewCardsCount(newCount);
     setReviewCardsCount(reviewCount);
     setLearnedCardsCount(learnedCount);
     setHardCardsCount(hardCount);
-    setStreak(savedStreak);
-    setTotalReviewed(savedReviews);
+    setLoading(false);
   };
 
   useEffect(() => {
-    // 1. Carrega os dados na abertura da página
-    loadProgressData();
+    loadLocalStats();
 
-    // 2. Escuta o evento de atualização enviado pelo Decks.jsx
-    window.addEventListener('lingua_storage_updated', loadProgressData);
+    // Espera o login terminar e recarrega quando o usuário muda (igual ao Translator)
+    const handleSession = (session) => {
+      if (session?.user) {
+        setUser(session.user);
+        if (loadedUserId.current !== session.user.id) {
+          loadedUserId.current = session.user.id;
+          loadCards(session.user.id);
+        }
+      } else {
+        loadedUserId.current = null;
+        setUser(null);
+        resetCounts();
+        setLoading(false);
+      }
+    };
+
+    supabase.auth.getSession().then(({ data: { session } }) => handleSession(session));
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      handleSession(session);
+    });
+
+    // Escuta o evento de atualização (se alguma parte do app disparar)
+    const handleStorageUpdate = () => {
+      loadLocalStats();
+      if (loadedUserId.current) loadCards(loadedUserId.current, true);
+    };
+    window.addEventListener('lingua_storage_updated', handleStorageUpdate);
 
     return () => {
-      window.removeEventListener('lingua_storage_updated', loadProgressData);
+      subscription.unsubscribe();
+      window.removeEventListener('lingua_storage_updated', handleStorageUpdate);
     };
   }, []);
 
@@ -88,12 +148,16 @@ export default function Progress() {
 
   // Reações do mascote
   const getMascotMood = () => {
+    if (loading || loadError || !user) return 'explain';
     if (streak >= 7 || masteryPercentage >= 70) return 'celebrate';
     if (totalCards === 0) return 'explain';
     return 'study';
   };
 
   const getMascotMessage = () => {
+    if (loading) return 'Counting your cards...';
+    if (loadError) return loadError;
+    if (!user) return 'Please sign in on the Translator tab to see your progress!';
     if (totalCards === 0) return "You don't have any cards yet! Add new words in the Translator tab to start building your decks!";
     if (masteryPercentage >= 70) return `Incredible! Your overall mastery is at ${masteryPercentage}%! Keep pushing forward! 🦊✨`;
     return `You have ${totalCards} cards saved across your decks. Review your due cards today to increase your mastery!`;

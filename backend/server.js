@@ -21,6 +21,11 @@ if (!apiKey) {
 
 const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
 
+// Mostra só o final da chave (nunca ela inteira) para conferir qual está em uso.
+if (apiKey) {
+  console.log(`GEMINI_API_KEY carregada, termina em: ...${apiKey.slice(-4)}`);
+}
+
 // Lista de modelos do Gemini, em ordem de prioridade. Se um falhar, o código
 // passa para o próximo até algum funcionar. Dá pra trocar a lista pelo Render
 // (Environment) sem mexer no código, separando os nomes por vírgula:
@@ -49,51 +54,6 @@ if (!supabaseUrl || !supabaseKey) {
 // Rota de teste inicial
 app.get('/', (req, res) => {
   res.json({ message: '🚀 LinguaDeck Backend Server is running smoothly with Supabase and Gemini!' });
-});
-
-// ==========================================
-// ROTAS DE SUPABASE (Decks & Cards)
-// ==========================================
-
-// 1. Obter palavras recentes (para a barra lateral do dashboard)
-app.get('/api/decks/recent-words', async (req, res) => {
-  try {
-    if (!supabase) {
-      return res.status(500).json({ error: 'Supabase is not configured on the server.' });
-    }
-
-    const { data, error } = await supabase
-      .from('cards')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    if (error) throw error;
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// 2. Criar um novo cartão/palavra
-app.post('/api/cards', async (req, res) => {
-  const { deck_id, word, reading, translation, type, level } = req.body;
-
-  try {
-    if (!supabase) {
-      return res.status(500).json({ error: 'Supabase is not configured on the server.' });
-    }
-
-    const { data, error } = await supabase
-      .from('cards')
-      .insert([{ deck_id, word, reading, translation, type, level }])
-      .select();
-
-    if (error) throw error;
-    res.status(201).json(data[0]);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
 });
 
 // ==========================================

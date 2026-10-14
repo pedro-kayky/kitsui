@@ -6,6 +6,158 @@ import './Decks.css';
 
 import { supabase } from '../../assets/components/supaBase/supaBaseClient';
 
+// ==========================================
+// CONFIGURAÇÕES DO ANKI (pode ajustar os números)
+// ==========================================
+const START_EASE = 2.5;   // facilidade inicial (o "Good" multiplica o intervalo por isso)
+const MIN_EASE = 1.3;     // a facilidade nunca cai abaixo disso
+const HARD_FACTOR = 1.2;  // o "Hard" multiplica o intervalo por isso
+const EASY_BONUS = 1.3;   // bônus extra do "Easy"
+const EASY_START_DAYS = 5; // intervalo do "Easy" em um cartão novo
+const EASY_MIN_DAYS = 3;   // o "Easy" perde 1 dia a cada erro, até chegar neste mínimo
+const LEARN_AHEAD_MS = 20 * 60 * 1000; // mostra cartões em aprendizado até 20 min antes da hora
+
+const MINUTE_MS = 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Estado de estudo do cartão (guardado dentro de data.srs no Supabase)
+// phase: 'new' | 'learn0' | 'learn1' | 'review'
+const getSrs = (card) => {
+  const saved = card.data?.srs;
+  if (saved && saved.phase) return saved;
+  if (!card.dueDate) return { phase: 'new', ease: START_EASE, lapses: 0 };
+  // Cartas estudadas antes deste sistema entram como revisão normal
+  return { phase: 'review', ease: START_EASE, lapses: 0 };
+};
+
+// Intervalo do "Easy" quando o cartão ainda está aprendendo: 5 dias, e vai caindo a cada erro
+const easyDaysFor = (lapses) => Math.max(EASY_MIN_DAYS, EASY_START_DAYS - lapses);
+
+// Como os intervalos crescem (cartão já aprendido):
+//   Hard = intervalo atual x 1.2
+//   Good = intervalo atual x facilidade (começa em 2.5)
+//   Easy = intervalo atual x facilidade x 1.3
+// A facilidade de cada cartão muda: Easy +0.15, Hard -0.15, Again -0.2, Good não muda
+// (nunca abaixo de 1.3). Os resultados são arredondados para dias inteiros.
+//
+// Calcula o que acontece com o cartão para cada botão (igual ao Anki)
+const computeSchedule = (card, rating) => {
+  const srs = getSrs(card);
+  const lapses = srs.lapses || 0;
+  const ease = srs.ease || START_EASE;
+  const now = Date.now();
+
+  // Continua em aprendizado (intervalo em minutos)
+  const stay = (phase, minutes, newLapses = lapses, newEase = ease) => ({
+    interval: 0,
+    minutes,
+    dueMs: now + minutes * MINUTE_MS,
+    srs: { phase, ease: newEase, lapses: newLapses }
+  });
+
+  // Aprendeu: vira revisão (intervalo em dias)
+  const graduate = (days, newEase = ease) => ({
+    interval: days,
+    days,
+    dueMs: now + days * DAY_MS,
+    srs: { phase: 'review', ease: newEase, lapses }
+  });
+
+  // Cartão já aprendido: os intervalos crescem conforme o botão escolhido
+  if (srs.phase === 'review') {
+    const current = Math.max(1, card.interval || 1);
+    const hard = Math.max(current + 1, Math.round(current * HARD_FACTOR));
+    const good = Math.max(hard + 1, Math.round(current * ease));
+    const easy = Math.max(good + 1, Math.round(current * ease * EASY_BONUS));
+
+    if (rating === 'again') return stay('learn1', 1, lapses + 1, Math.max(MIN_EASE, ease - 0.2));
+    if (rating === 'hard') return graduate(hard, Math.max(MIN_EASE, ease - 0.15));
+    if (rating === 'good') return graduate(good);
+    return graduate(easy, ease + 0.15);
+  }
+
+  // Segunda etapa do aprendizado (depois de um erro ou do primeiro "Good")
+  if (srs.phase === 'learn1') {
+    if (rating === 'again') return stay('learn1', 1, lapses + 1);
+    if (rating === 'hard') return stay('learn1', 10);
+    if (rating === 'good') return graduate(1);
+    return graduate(easyDaysFor(lapses));
+  }
+
+  // Cartão novo (ou ainda na primeira etapa): 1m, 6m, 10m e Easy em dias
+  if (rating === 'again') return stay('learn1', 1, lapses + 1);
+  if (rating === 'hard') return stay('learn0', 6);
+  if (rating === 'good') return stay('learn1', 10);
+  return graduate(easyDaysFor(lapses));
+};
+
+const formatDays = (days) => {
+  if (days < 30) return `${days}d`;
+  if (days < 365) return `${(days / 30).toFixed(1).replace(/\.0$/, '')}mo`;
+  return `${(days / 365).toFixed(1).replace(/\.0$/, '')}y`;
+};
+
+// Texto que aparece em cima de cada botão (ex.: <1m, <6m, <10m, 5d)
+const getButtonLabels = (card) => {
+  const label = (rating) => {
+    const r = computeSchedule(card, rating);
+    return r.minutes !== undefined ? `<${r.minutes}m` : formatDays(r.days);
+  };
+  return {
+    again: label('again'),
+    hard: label('hard'),
+    good: label('good'),
+    easy: label('easy')
+  };
+};
+
+const shuffle = (array) => {
+  const copy = [...array];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+};
+
+// Escolhe o próximo cartão da fila: primeiro os novos/vencidos,
+// depois os que estão em aprendizado (o que vence primeiro)
+const pickNextIndex = (queue) => {
+  const now = Date.now();
+
+  const readyIndex = queue.findIndex(
+    (card) => !card.dueDate || new Date(card.dueDate).getTime() <= now
+  );
+  if (readyIndex !== -1) return readyIndex;
+
+  let bestIndex = -1;
+  let bestTime = Infinity;
+  queue.forEach((card, i) => {
+    const time = new Date(card.dueDate).getTime();
+    if (time < bestTime && time - now <= LEARN_AHEAD_MS) {
+      bestIndex = i;
+      bestTime = time;
+    }
+  });
+  return bestIndex;
+};
+
+// Contadores do topo (novos, revisões, aprendendo) calculados a partir da fila
+const getQueueCounts = (queue) => {
+  let newCount = 0;
+  let reviewCount = 0;
+  let learningCount = 0;
+
+  queue.forEach((card) => {
+    const { phase } = getSrs(card);
+    if (phase === 'new') newCount++;
+    else if (phase === 'review') reviewCount++;
+    else learningCount++;
+  });
+
+  return { newCount, reviewCount, learningCount };
+};
+
 export default function Decks() {
   // Inicialização instantânea via cache local
   const [decks, setDecks] = useState(() => {
@@ -32,7 +184,6 @@ export default function Decks() {
   const [studyQueue, setStudyQueue] = useState([]);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
-  const [studyStats, setStudyStats] = useState({ newCount: 0, reviewCount: 0, learningCount: 0 });
 
   // Mascot Reactions
   const [consecutiveErrors, setConsecutiveErrors] = useState(0);
@@ -283,25 +434,14 @@ export default function Decks() {
     const deckCards = decks[deckName] || [];
     const now = new Date();
 
-    let newCount = 0;
-    let reviewCount = 0;
-
-    const dueCards = deckCards.filter(card => {
-      if (!card.dueDate) {
-        newCount++;
-        return true;
-      }
-      const due = new Date(card.dueDate);
-      if (due <= now) {
-        reviewCount++;
-        return true;
-      }
-      return false;
-    });
+    // Cartas novas ou que já venceram, em ordem embaralhada
+    // (assim a ordem do estudo não é a mesma da lista do deck)
+    const dueCards = shuffle(
+      deckCards.filter(card => !card.dueDate || new Date(card.dueDate) <= now)
+    );
 
     selectDeckByName(deckName);
     setStudyQueue(dueCards);
-    setStudyStats({ newCount, reviewCount, learningCount: 0 });
     setCurrentCardIndex(0);
     setShowAnswer(false);
     setIsStudying(true);
@@ -314,29 +454,19 @@ export default function Decks() {
   };
 
   const handleRateCard = async (rating) => {
-    if (studyQueue.length === 0) return;
-
     const currentCard = studyQueue[currentCardIndex];
-    const currentCardsInDeck = decks[activeDeckName] || [];
-    
-    const now = new Date();
-    let currentInterval = currentCard.interval || 0;
-    let newInterval = 1;
-    let newDueDate = new Date();
+    if (!currentCard) return;
 
-    if (rating === 'again') {
-      newInterval = 0;
-      newDueDate = new Date(now.getTime() + 10 * 60 * 1000);
-    } else if (rating === 'hard') {
-      newInterval = Math.max(1, Math.floor(currentInterval * 1.2));
-      newDueDate.setDate(now.getDate() + newInterval);
-    } else if (rating === 'good') {
-      newInterval = currentInterval === 0 ? 3 : Math.floor(currentInterval * 2.5);
-      newDueDate.setDate(now.getDate() + newInterval);
-    } else if (rating === 'easy') {
-      newInterval = currentInterval === 0 ? 5 : Math.floor(currentInterval * 4);
-      newDueDate.setDate(now.getDate() + newInterval);
-    }
+    // Calcula o novo intervalo e o novo estado do cartão (igual ao Anki)
+    const result = computeSchedule(currentCard, rating);
+    const newDueDate = new Date(result.dueMs).toISOString();
+    const newData = { ...(currentCard.data || {}), srs: result.srs };
+    const updatedCard = {
+      ...currentCard,
+      interval: result.interval,
+      dueDate: newDueDate,
+      data: newData
+    };
 
     if (rating === 'again') {
       const nextErrors = consecutiveErrors + 1;
@@ -365,61 +495,53 @@ export default function Decks() {
       setConsecutiveErrors(0);
     }
 
-    try {
-      await supabase
-        .from('cards')
-        .update({
-          interval: newInterval,
-          due_date: newDueDate.toISOString()
-        })
-        .eq('id', currentCard.id);
-    } catch (err) {
-      console.error("Error updating SRS in Supabase:", err);
-    }
-
-    const updatedDeckCards = currentCardsInDeck.map(card => {
-      if (card.id === currentCard.id) {
-        return {
-          ...card,
-          interval: newInterval,
-          dueDate: newDueDate.toISOString()
-        };
-      }
-      return card;
-    });
-
+    // Atualiza o cartão no deck (tela e cache local)
+    const updatedDeckCards = (decks[activeDeckName] || []).map(card =>
+      card.id === currentCard.id ? updatedCard : card
+    );
     const updatedDecks = { ...decks, [activeDeckName]: updatedDeckCards };
     setDecks(updatedDecks);
     localStorage.setItem('linguaDeck_cachedDecks', JSON.stringify(updatedDecks));
 
-    let updatedQueue = [...studyQueue];
-    let newStats = { ...studyStats };
-
-    if (!currentCard.dueDate) {
-      newStats.newCount = Math.max(0, newStats.newCount - 1);
-    } else {
-      newStats.reviewCount = Math.max(0, newStats.reviewCount - 1);
+    // Atualiza a fila: se ainda está aprendendo, volta para o fim da fila;
+    // se já aprendeu (vira revisão em dias), sai da sessão de hoje
+    const updatedQueue = studyQueue.filter((_, i) => i !== currentCardIndex);
+    if (result.srs.phase !== 'review') {
+      updatedQueue.push(updatedCard);
     }
 
-    if (rating === 'again') {
-      newStats.learningCount += 1;
-      const failedCard = updatedQueue.splice(currentCardIndex, 1)[0];
-      updatedQueue.push(failedCard);
-    } else {
-      updatedQueue.splice(currentCardIndex, 1);
-    }
-
-    setStudyStats(newStats);
     setStudyQueue(updatedQueue);
     setShowAnswer(false);
 
     if (updatedQueue.length > 0) {
-      setCurrentCardIndex(prev => prev >= updatedQueue.length ? 0 : prev);
+      setCurrentCardIndex(Math.max(0, pickNextIndex(updatedQueue)));
     } else {
+      setCurrentCardIndex(0);
       setMascotState({
         mood: 'parabens',
         message: 'Congratulations! You cleared all cards in this study session!'
       });
+    }
+
+    // Salva o progresso no Supabase
+    try {
+      const { data: savedRows, error } = await supabase
+        .from('cards')
+        .update({
+          interval: result.interval,
+          due_date: newDueDate,
+          data: newData
+        })
+        .eq('id', currentCard.id)
+        .select('id');
+
+      if (error) throw error;
+      if (!savedRows || savedRows.length === 0) {
+        throw new Error('No rows were updated (check the update policy of the cards table).');
+      }
+    } catch (err) {
+      console.error("Error updating SRS in Supabase:", err);
+      showNotification('Could not save your progress to the cloud.');
     }
   };
 
@@ -494,7 +616,28 @@ export default function Decks() {
   const recentWordsList = getRecentWordsList();
 
   return (
-    <div className="decks-page-container">
+    <div className={`decks-page-container${isStudying ? ' studying' : ''}`}>
+      {/* No PC, centraliza a tela de estudo (o celular não muda) */}
+      <style>{`
+        @media (min-width: 900px) {
+          .decks-page-container.studying {
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+            align-items: flex-start;
+            width: 100%;
+            max-width: none;
+            margin: 0 auto;
+            box-sizing: border-box;
+          }
+          .decks-page-container.studying .decks-main-content {
+            width: 100%;
+            max-width: 640px;
+            margin: 0 auto;
+          }
+        }
+      `}</style>
+
       {notification && <div className="notification-toast">{notification}</div>}
 
       <div className="decks-main-content">
@@ -502,6 +645,8 @@ export default function Decks() {
           (() => {
             const currentCard = studyQueue[currentCardIndex];
             const isFinished = studyQueue.length === 0 || !currentCard;
+            const counts = getQueueCounts(studyQueue);
+            const labels = isFinished ? null : getButtonLabels(currentCard);
 
             return (
               <div className="decks-container">
@@ -520,9 +665,9 @@ export default function Decks() {
                     <div className="study-top-bar">
                       <h2>{activeDeckName}</h2>
                       <div className="anki-live-counters">
-                        <span className="counter-badge counter-new" title="New cards">{studyStats.newCount}</span>
-                        <span className="counter-badge counter-review" title="Review cards">{studyStats.reviewCount}</span>
-                        <span className="counter-badge counter-learning" title="Learning / Due again">{studyStats.learningCount}</span>
+                        <span className="counter-badge counter-new" title="New cards">{counts.newCount}</span>
+                        <span className="counter-badge counter-review" title="Review cards">{counts.reviewCount}</span>
+                        <span className="counter-badge counter-learning" title="Learning / Due again">{counts.learningCount}</span>
                       </div>
                     </div>
                   </div>
@@ -580,19 +725,19 @@ export default function Decks() {
                     ) : (
                       <div className="anki-actions-grid">
                         <button onClick={() => handleRateCard('again')} className="btn-anki-rate btn-again">
-                          <span style={{ display: 'block', fontSize: '0.75rem', opacity: 0.85 }}>&lt;10m</span>
+                          <span style={{ display: 'block', fontSize: '0.75rem', opacity: 0.85 }}>{labels.again}</span>
                           Again
                         </button>
                         <button onClick={() => handleRateCard('hard')} className="btn-anki-rate btn-hard">
-                          <span style={{ display: 'block', fontSize: '0.75rem', opacity: 0.85 }}>1d</span>
+                          <span style={{ display: 'block', fontSize: '0.75rem', opacity: 0.85 }}>{labels.hard}</span>
                           Hard
                         </button>
                         <button onClick={() => handleRateCard('good')} className="btn-anki-rate btn-good">
-                          <span style={{ display: 'block', fontSize: '0.75rem', opacity: 0.85 }}>3d</span>
+                          <span style={{ display: 'block', fontSize: '0.75rem', opacity: 0.85 }}>{labels.good}</span>
                           Good
                         </button>
                         <button onClick={() => handleRateCard('easy')} className="btn-anki-rate btn-easy">
-                          <span style={{ display: 'block', fontSize: '0.75rem', opacity: 0.85 }}>4d+</span>
+                          <span style={{ display: 'block', fontSize: '0.75rem', opacity: 0.85 }}>{labels.easy}</span>
                           Easy
                         </button>
                       </div>
@@ -758,9 +903,13 @@ export default function Decks() {
         )}
       </div>
 
-      <div className="decks-sidebar">
-        <RecentWordsTimeline recentWords={recentWordsList} />
-      </div>
+      {/* A lista de palavras recentes fica escondida durante o estudo,
+          para não entregar as respostas dos cartões */}
+      {!isStudying && (
+        <div className="decks-sidebar">
+          <RecentWordsTimeline recentWords={recentWordsList} />
+        </div>
+      )}
     </div>
   );
 }

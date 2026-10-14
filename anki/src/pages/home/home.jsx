@@ -155,9 +155,21 @@ export default function Translator() {
     try {
       const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000';
       
+      // Pega o login atual do usuário para o servidor confirmar quem está pedindo
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token;
+
+      if (!accessToken) {
+        setError('Please sign in again to use the translator.');
+        return;
+      }
+
       const response = await fetch(`${API_URL}/api/translate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        },
         body: JSON.stringify({ word, sourceLang, targetLang }),
         signal: controller.signal
       });
@@ -298,6 +310,10 @@ export default function Translator() {
             </svg>
             Continue with Google
           </button>
+
+          <p style={{ marginTop: '16px', fontSize: '0.8rem' }}>
+            <a href="/privacy.html" style={{ color: 'var(--text-muted, #666)' }}>Privacy Policy</a>
+          </p>
         </div>
       </div>
     );

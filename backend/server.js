@@ -8,9 +8,12 @@ dotenv.config();
 
 const app = express();
 
+// O Render fica na frente do servidor; com isso o req.ip mostra o IP real do visitante
+app.set('trust proxy', 1);
+
 // Middlewares
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10kb' })); // pedidos gigantes são recusados
 
 const PORT = process.env.PORT || 5000;
 const apiKey = process.env.GEMINI_API_KEY;
@@ -45,7 +48,9 @@ const MODELS = process.env.GEMINI_MODELS
 // Inicializar o Supabase com as chaves do .env
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
-const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
+const supabase = (supabaseUrl && supabaseKey)
+  ? createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false, autoRefreshToken: false } })
+  : null;
 
 if (!supabaseUrl || !supabaseKey) {
   console.error('AVISO: Credenciais do Supabase não encontradas no arquivo .env');
@@ -152,10 +157,105 @@ async function generateWithRetry(prompt, maxAttempts = 1) {
 }
 
 // ==========================================
+// PROTEÇÕES DA ROTA DA IA (login e limite de pedidos)
+// ==========================================
+
+// Tamanho máximo do texto que o usuário pode mandar para traduzir
+const MAX_WORD_LENGTH = 300;
+
+// Limitador simples em memória: no máximo "max" pedidos a cada "windowMs" para cada chave
+const createRateLimiter = ({ windowMs, max, keyFn, message }) => {
+  const hits = new Map(); // chave -> horários dos últimos pedidos
+
+  // Limpa de vez em quando as chaves antigas, para a memória não crescer
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, times] of hits) {
+      const recent = times.filter((t) => now - t < windowMs);
+      if (recent.length === 0) hits.delete(key);
+      else hits.set(key, recent);
+    }
+  }, Math.min(windowMs, 10 * 60 * 1000)).unref();
+
+  return (req, res, next) => {
+    const key = keyFn(req);
+    const now = Date.now();
+    const recent = (hits.get(key) || []).filter((t) => now - t < windowMs);
+
+    if (recent.length >= max) {
+      const retryAfter = Math.ceil((windowMs - (now - recent[0])) / 1000);
+      res.set('Retry-After', String(retryAfter));
+      return res.status(429).json({ error: message });
+    }
+
+    recent.push(now);
+    hits.set(key, recent);
+    next();
+  };
+};
+
+// 1º filtro: por IP, antes de qualquer outra coisa (barra quem fica martelando o servidor)
+const ipLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 60,
+  keyFn: (req) => req.ip,
+  message: 'Too many requests. Please wait a moment and try again.',
+});
+
+// Confere se quem está pedindo tem um login válido do Supabase
+const requireAuth = async (req, res, next) => {
+  if (!supabase) {
+    console.error('Login check unavailable: SUPABASE_URL / SUPABASE_ANON_KEY are missing on the server.');
+    return res.status(500).json({ error: 'The server login check is not configured.' });
+  }
+
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+
+  if (!token) {
+    return res.status(401).json({ error: 'Please sign in to use the translator.' });
+  }
+
+  try {
+    const { data, error } = await supabase.auth.getUser(token);
+
+    if (error || !data?.user) {
+      const loginProblem = !error || [400, 401, 403].includes(error.status);
+      return res.status(loginProblem ? 401 : 503).json({
+        error: loginProblem
+          ? 'Your session has expired. Please sign in again.'
+          : 'Could not verify your login right now. Please try again.',
+      });
+    }
+
+    req.user = data.user;
+    next();
+  } catch (err) {
+    console.error('Error verifying login:', err);
+    res.status(503).json({ error: 'Could not verify your login right now. Please try again.' });
+  }
+};
+
+// Limites por usuário (generosos: quem estuda normalmente nunca chega neles)
+const userPerMinuteLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 20,
+  keyFn: (req) => req.user.id,
+  message: 'You are translating very fast. Please wait a few seconds and try again.',
+});
+
+const userPerDayLimiter = createRateLimiter({
+  windowMs: 24 * 60 * 60 * 1000,
+  max: 300,
+  keyFn: (req) => req.user.id,
+  message: 'You reached the daily translation limit. Please come back tomorrow.',
+});
+
+// ==========================================
 // ROTA DA IA (Tradução e Geração de Flashcards)
 // ==========================================
 
-app.post('/api/translate', async (req, res) => {
+app.post('/api/translate', ipLimiter, requireAuth, userPerMinuteLimiter, userPerDayLimiter, async (req, res) => {
   try {
     if (!genAI) {
       return res.status(500).json({
@@ -163,15 +263,22 @@ app.post('/api/translate', async (req, res) => {
       });
     }
 
-    const {
-      word,
-      sourceLang = 'Japonês',
-      targetLang = 'Português',
-    } = req.body;
+    const body = req.body || {};
+    const word = typeof body.word === 'string' ? body.word.trim() : '';
+    const sourceLang =
+      typeof body.sourceLang === 'string' && body.sourceLang.length <= 40 ? body.sourceLang : 'Japonês';
+    const targetLang =
+      typeof body.targetLang === 'string' && body.targetLang.length <= 40 ? body.targetLang : 'Português';
 
-    if (!word || !word.trim()) {
+    if (!word) {
       return res.status(400).json({
         error: 'Please enter a word or phrase.',
+      });
+    }
+
+    if (word.length > MAX_WORD_LENGTH) {
+      return res.status(400).json({
+        error: `Please use a shorter text (up to ${MAX_WORD_LENGTH} characters).`,
       });
     }
 

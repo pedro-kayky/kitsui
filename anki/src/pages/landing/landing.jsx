@@ -1,5 +1,6 @@
 import React from 'react';
 import Mascot from '../../assets/components/pet/Mascot';
+import { Link } from 'react-router-dom';
 
 const LANGUAGES = [
   'Japanese', 'English', 'Portuguese', 'Spanish', 'French', 'German', 'Korean',
@@ -331,12 +332,14 @@ export default function Landing({ onLogin }) {
         </section>
       </main>
 
-      <footer className="landing-footer">
-        <a href="/privacy.html">Privacy Policy</a>
-        <span aria-hidden="true">·</span>
-        <a href="mailto:kitsui547@gmail.com">Contact</a>
-        <p>© {new Date().getFullYear()} Kitsui</p>
-      </footer>
+     <footer className="landing-footer">
+  <Link to="/guides">Guides</Link>
+  <Link to="/about">About</Link>
+  <Link to="/contact">Contact</Link>
+  <Link to="/terms">Terms</Link>
+  <a href="/privacy.html">Privacy Policy</a>
+  <p>© {new Date().getFullYear()} Kitsui</p>
+</footer>
     </div>
   );
 }

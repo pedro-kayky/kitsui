@@ -6,6 +6,10 @@ import Progress from "../progress/Progress";
 import Decks from "../deck/decks";
 import Settings from "../Settings/settings";
 import NavBar from "../../assets/components/Navbar/NavBar";
+import About from "../publicpage/about";
+import Contact from "../publicpage/Contact";
+import Terms from "../publicpage/Terms";
+import Guides from "../publicpage/Guidex";
 import { supabase } from '../../assets/components/supaBase/supaBaseClient'
 
 const AppRoutes = () => {
@@ -40,6 +44,11 @@ const AppRoutes = () => {
         <Route path="/decks" element={<Decks />} />
         <Route path="/review" element={<Review />} />
         <Route path="/progress" element={<Progress />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/contact" element={<Contact />} />
+        <Route path="/Terms" element={<Terms />} />
+        <Route path="/guides" element={<Guides />} />
+        <Route path="/guides/:slug" element={<Guides />} />
         
         {/* Rota de Settings/Profile a receber o mesmo utilizador */}
         <Route 

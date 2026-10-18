@@ -6,7 +6,7 @@ import Progress from "../progress/Progress";
 import Decks from "../deck/decks";
 import Settings from "../Settings/settings";
 import NavBar from "../../assets/components/Navbar/NavBar";
-import About from "../publicpage/about";
+import About from "../publicpage/About";
 import Contact from "../publicpage/Contact";
 import Terms from "../publicpage/Terms";
 import Guides from "../publicpage/Guidex";

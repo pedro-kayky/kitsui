@@ -65,9 +65,11 @@ app.get('/', (req, res) => {
 // FUNÇÕES AUXILIARES DA IA (retry + modelo reserva)
 // ==========================================
 
+// maxOutputTokens foi de 900 para 2048: com 900, respostas com furigana e vários
+// exemplos podiam ser cortadas no meio, deixando o JSON quebrado.
 const GENERATION_CONFIG = {
   temperature: 0.1,
-  maxOutputTokens: 900,
+  maxOutputTokens: 2048,
   responseMimeType: 'application/json',
 };
 
@@ -101,10 +103,53 @@ const isTemporaryError = (err) =>
   err?.status === 429 ||
   /abort|timeout|timed out|fetch failed|econnreset/i.test(`${err?.name} ${err?.message}`);
 
+// Erro usado quando a IA responde, mas a resposta não é um JSON válido.
+// Nesse caso o código tenta o próximo modelo em vez de mostrar o erro técnico.
+class BadAiResponseError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'BadAiResponseError';
+  }
+}
+
+// Transforma a resposta da IA em objeto. Se vier quebrada, tenta limpar;
+// se mesmo assim não der, lança BadAiResponseError.
+function parseAiJson(result) {
+  let text;
+  try {
+    text = result.response.text().trim();
+  } catch (err) {
+    // Acontece, por exemplo, quando a resposta é bloqueada ou vem vazia
+    throw new BadAiResponseError(`Could not read the AI answer: ${err.message}`);
+  }
+
+  text = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start === -1 || end === -1 || end < start) {
+    throw new BadAiResponseError('The AI answer has no JSON object');
+  }
+  text = text.substring(start, end + 1);
+
+  try {
+    return JSON.parse(text);
+  } catch (firstError) {
+    // Tenta consertar o erro mais comum: vírgula sobrando antes de } ou ]
+    try {
+      return JSON.parse(text.replace(/,\s*([}\]])/g, '$1'));
+    } catch {
+      throw new BadAiResponseError(`The AI answer is not valid JSON: ${firstError.message}`);
+    }
+  }
+}
+
 // Percorre a lista de modelos na ordem. Por padrão cada modelo recebe só 1
-// tentativa: se falhar (sobrecarga, timeout ou 404), passa direto para o próximo,
-// sem perder tempo. Se quiser repetir o mesmo modelo, aumente o maxAttempts.
-async function generateWithRetry(prompt, maxAttempts = 1) {
+// tentativa: se falhar (sobrecarga, timeout, 404 ou resposta quebrada), passa
+// direto para o próximo, sem perder tempo. Se quiser repetir o mesmo modelo,
+// aumente o maxAttempts.
+// "parse" é a função que lê a resposta da IA (parseAiJson).
+async function generateWithRetry(prompt, parse, maxAttempts = 1) {
   const models = [...new Set(availableModels())];
   const startedAt = Date.now();
   let lastError;
@@ -122,10 +167,18 @@ async function generateWithRetry(prompt, maxAttempts = 1) {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const result = await model.generateContent(prompt);
+        const parsed = parse(result); // se a resposta vier quebrada, cai no catch
         console.log(`OK com ${modelName} (${Date.now() - startedAt}ms no total)`);
-        return result;
+        return parsed;
       } catch (err) {
         lastError = err;
+
+        // Resposta quebrada (JSON inválido): vai direto para o próximo modelo.
+        if (err instanceof BadAiResponseError) {
+          console.warn(`Resposta inválida de ${modelName}: ${err.message}`);
+          break;
+        }
+
         if (isTemporaryError(err)) temporaryError = err;
         if (err.status === 404 || isTemporaryError(err)) {
           modelCooldown.set(
@@ -325,18 +378,9 @@ Rules:
 10. Return strictly valid JSON only, without markdown code fences or extra text.
 `;
 
-    const result = await generateWithRetry(prompt);
-    let responseText = result.response.text().trim();
-
-    responseText = responseText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
-
-    const jsonStartIndex = responseText.indexOf('{');
-    const jsonEndIndex = responseText.lastIndexOf('}');
-    if (jsonStartIndex !== -1 && jsonEndIndex !== -1) {
-      responseText = responseText.substring(jsonStartIndex, jsonEndIndex + 1);
-    }
-
-    const data = JSON.parse(responseText);
+    // A leitura do JSON agora acontece dentro do retry: se um modelo devolver
+    // uma resposta quebrada, o código tenta o próximo em vez de dar erro.
+    const data = await generateWithRetry(prompt, parseAiJson);
 
     const normalizedData = {
       mainWord: data.mainWord || word,
@@ -361,6 +405,13 @@ Rules:
     if (isTemporaryError(error)) {
       return res.status(503).json({
         error: 'The AI is receiving a lot of requests right now. Please wait a few seconds and try again.',
+      });
+    }
+
+    // Todos os modelos devolveram respostas quebradas: não mostra o erro técnico.
+    if (error instanceof BadAiResponseError) {
+      return res.status(502).json({
+        error: 'The AI sent an answer in the wrong format. Please press Search again.',
       });
     }
 

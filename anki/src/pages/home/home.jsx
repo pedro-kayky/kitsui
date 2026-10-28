@@ -52,6 +52,13 @@ export default function Translator() {
   );
   const [user, setUser] = useState(null);
 
+  // Acorda o servidor (o Render "dorme" quando fica parado) assim que a página abre,
+  // para a primeira busca não precisar esperar ele ligar.
+  useEffect(() => {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000';
+    fetch(`${API_URL}/`).catch(() => {});
+  }, []);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
